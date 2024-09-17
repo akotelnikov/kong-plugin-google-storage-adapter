@@ -3,8 +3,6 @@ local openssl_hmac = require "resty.openssl.hmac"
 local sha256 = require "resty.sha256"
 local str = require "resty.string"
 
-local path_normalization = require "kong.plugins.google-storage-adapter.path_normalization"
-
 local kong = kong
 
 local GCLOUD_STORAGE_HOST = "storage.googleapis.com"
@@ -18,8 +16,85 @@ local GCLOUD_UNSIGNED_PAYLOAD = 'UNSIGNED-PAYLOAD'
 
 local _M = {}
 
+local function get_service_path()
+  local service = kong.router.get_service()
+  if service then
+    -- For example "/my-game/"
+    return service.path
+  end
+  return ""
+end
+
+-- handle case when we have a trailing slash in the end of the path
+local function add_index_file_to_path(req_path)
+  if string.match(req_path, "(.*)/$") then
+    return req_path .. "index.html"
+  elseif string.match(req_path, "(.*)/[^/.]+$") then
+    return req_path .. "/index.html"
+  end
+  return req_path
+end
+
+---
+-- Constructs a normal req path to an exact resourse
+--
+-- Example:
+-- /my-page -> /my-page/index.html
+-- /my-page/ -> /my-page/index.html
+-- /multipage/ru-RU/first-game-subpath/index.html -> /first-game/ru-RU/index.html
+--
+local function get_normalized_path(conf)
+  local service_path = get_service_path()
+  -- if there's any override to a particular page (e.g. 403.html)
+  if string.match(service_path, "(.*).html$") then
+    return service_path
+  end
+
+  local req_path = kong.request.get_path()
+
+  -- if there's an active experiment we will change the service path
+  local ab_testing_path = kong.ctx.shared.ab_testing_path
+  if ab_testing_path and ab_testing_path ~= "" then
+    local log_message = string.format(
+    "An active A/B test has been found, the service request path will be changed to %s", ab_testing_path)
+    kong.log.notice(log_message)
+    req_path = ab_testing_path
+  end
+
+  -- by default we have the /sites prefix
+  local prefix = conf.path_transformation.prefix
+  if prefix then
+    req_path = string.gsub(req_path, prefix, "")
+  end
+
+  if not conf.path_transformation.enabled then
+    return req_path
+  end
+
+  -- multipage routes handling
+  local main_domain = req_path:match("^/[a-zA-Z0-9%-%_]+/?") or ""
+  local locale = req_path:match("%l%l%-%u%u/?") or ""
+  local file_name = req_path:match("[a-zA-Z0-9-_]*%.?[a-zA-Z0-9-_]+%.[a-zA-Z0-9-_]+$") or ""
+  local one_page_path = main_domain .. locale .. file_name
+  local is_one_page_site = one_page_path == req_path
+
+  if conf.path_transformation.log then
+    local log_message = string.format(
+      "The request path has been parsed successfully; The main domain is %s, the locale is %s, the file name is %s",
+      main_domain, locale, file_name)
+    kong.log.notice(log_message)
+  end
+
+  if is_one_page_site then
+    return add_index_file_to_path(req_path)
+  else
+    local full_path = service_path .. locale .. file_name
+    return add_index_file_to_path(full_path)
+  end
+end
+
 local function create_canonical_request(conf, current_precise_date)
-  local path = path_normalization.get_path(conf.path_transformation)
+  local path = get_normalized_path(conf)
 
   local bucket_name = conf.request_authentication.bucket_name
   local host = bucket_name .. "." .. GCLOUD_STORAGE_HOST
@@ -101,9 +176,9 @@ local function transform_uri(conf)
     return
   end
 
-  local service_path = path_normalization.get_service_path()
+  local service_path = get_service_path()
   local req_path = kong.request.get_path()
-  local normalized_path = path_normalization.get_path(conf.path_transformation)
+  local normalized_path = get_normalized_path(conf)
   if conf.path_transformation.log then
     local log_message = "The upstream path may be modifed. The request path " .. req_path ..
         ", the service path " .. service_path ..

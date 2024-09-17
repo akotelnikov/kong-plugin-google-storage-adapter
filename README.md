@@ -51,7 +51,7 @@ POST :8001/plugins
 ## Commands
 
 ```
-luarocks pack ./kong-plugin-google-storage-adapter-1.6.2-0.rockspec  
-luarocks upload ./kong-plugin-google-storage-adapter-1.6.2-0.rockspec --api-key=
+luarocks pack kong-plugin-google-storage-adapter-1.6.2-0.rockspec  
+luarocks upload kong-plugin-google-storage-adapter-1.6.2-0.rockspec --api-key=
 
 ```
