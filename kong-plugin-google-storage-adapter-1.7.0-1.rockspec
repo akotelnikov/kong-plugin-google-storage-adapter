@@ -1,7 +1,7 @@
 local plugin_name = "google-storage-adapter"
 local package_name = "kong-plugin-" .. plugin_name
 local package_version = "1.7.0"
-local rockspec_revision = "0"
+local rockspec_revision = "1"
 local full_version = package_version .. "-" .. rockspec_revision
 
 package = package_name
