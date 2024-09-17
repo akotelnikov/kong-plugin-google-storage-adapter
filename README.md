@@ -48,3 +48,10 @@ POST :8001/plugins
 	"id": "04752261-8efd-4898-9cbc-84573e6c8ee6"
 }
 ```
+## Commands
+
+```
+luarocks pack ./kong-plugin-google-storage-adapter-1.6.2-0.rockspec  
+luarocks upload ./kong-plugin-google-storage-adapter-1.6.2-0.rockspec --api-key=
+
+```

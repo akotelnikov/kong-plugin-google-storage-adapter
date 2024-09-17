@@ -3,11 +3,7 @@ local openssl_hmac = require "resty.openssl.hmac"
 local sha256 = require "resty.sha256"
 local str = require "resty.string"
 
-local get_req_path = kong.request.get_path
-local get_raw_query = kong.request.get_raw_query
-local get_service = kong.router.get_service
-local set_path = kong.service.request.set_path
-local set_header = kong.service.request.set_header
+local path_normalization = require "kong.plugins.google-storage-adapter.path_normalization"
 
 local kong = kong
 
@@ -22,87 +18,29 @@ local GCLOUD_UNSIGNED_PAYLOAD = 'UNSIGNED-PAYLOAD'
 
 local _M = {}
 
-local function get_service_path()
-  local service = get_service()
-  if service then
-    return service.path
-  end
-  return ""
-end
-
--- handle case when we have a trailing slash in the end of the path
-function add_index_file_to_path(req_path)
-  if string.match(req_path, "(.*)/$") then
-    return req_path .. "index.html"
-  elseif string.match(req_path, "(.*)/[^/.]+$") then
-    return req_path .. "/index.html"
-  end
-  return req_path
-end
-
-local function get_normalized_path(conf)
-  local service_path = get_service_path()
-  -- if there's any override to a particular page (e.g. 403.html)
-  if string.match(service_path, "(.*).html$") then
-    return service_path
-  end
-
-  local req_path = get_req_path()
-  local prefix = conf.path_transformation.prefix
-  if prefix then
-    req_path = string.gsub(req_path, prefix, "")
-  end
-
-  if not conf.path_transformation.enabled then
-    return req_path
-  end
-
-  -- multipage routes handling
-  local main_domain = req_path:match("^/[a-zA-Z0-9%-%_]+/?") or ""
-  local locale = req_path:match("%l%l%-%u%u/?") or ""
-  local file_name = req_path:match("[a-zA-Z0-9-_]*%.?[a-zA-Z0-9-_]+%.[a-zA-Z0-9-_]+$") or ""
-  local one_page_path = main_domain .. locale .. file_name
-  local is_one_page_site = one_page_path == req_path
-
-  if is_one_page_site then
-    return add_index_file_to_path(req_path)
-  else
-    local full_path = service_path .. locale .. file_name
-    if conf.path_transformation.log then
-      local log_message = "Built path for the multipage site" ..
-        ", the main domain " .. main_domain ..
-        ", the locale path " .. locale ..
-        ", the file name " .. file_name ..
-        ", the full path " .. full_path
-      kong.log.notice(log_message)
-    end
-    return add_index_file_to_path(full_path)
-  end
-end
-
 local function create_canonical_request(conf, current_precise_date)
-  local path = get_normalized_path(conf)
+  local path = path_normalization.get_path(conf.path_transformation)
 
   local bucket_name = conf.request_authentication.bucket_name
   local host = bucket_name .. "." .. GCLOUD_STORAGE_HOST
-  local query_string = get_raw_query()
+  local query_string = kong.request.get_raw_query()
 
   local canonical_uri = path
   local canonical_headers = 'host:' .. host .. "\n" ..
-    'x-goog-content-sha256:' .. GCLOUD_UNSIGNED_PAYLOAD .. "\n" ..
-    'x-goog-date:' .. current_precise_date
+      'x-goog-content-sha256:' .. GCLOUD_UNSIGNED_PAYLOAD .. "\n" ..
+      'x-goog-date:' .. current_precise_date
 
   local canonical_request = GCLOUD_METHOD .. "\n" ..
-    canonical_uri .. "\n" ..
-    query_string .. "\n" ..
-    canonical_headers .. '\n\n' ..
-    GCLOUD_SIGNED_HEADERS .. "\n" ..
-    GCLOUD_UNSIGNED_PAYLOAD
-  
+      canonical_uri .. "\n" ..
+      query_string .. "\n" ..
+      canonical_headers .. '\n\n' ..
+      GCLOUD_SIGNED_HEADERS .. "\n" ..
+      GCLOUD_UNSIGNED_PAYLOAD
+
   return canonical_request
 end
 
-local function create_hex_canonical_request(canonical_request) 
+local function create_hex_canonical_request(canonical_request)
   local digest = sha256:new()
   digest:update(canonical_request)
   local canonical_request_hex = str.to_hex(digest:final())
@@ -132,30 +70,30 @@ local function do_authentication(conf)
   local canonical_request = create_canonical_request(conf, current_precise_date)
   local canonical_request_hex = create_hex_canonical_request(canonical_request)
   local string_to_sign = GCLOUD_SIGNING_ALGORITHM .. "\n" ..
-    current_precise_date .. "\n" ..
-    credential_scope .. "\n" ..
-    canonical_request_hex
+      current_precise_date .. "\n" ..
+      credential_scope .. "\n" ..
+      canonical_request_hex
 
   local signing_key = create_signing_key(conf.request_authentication.secret, current_date)
   local signature_raw = openssl_hmac.new(signing_key, "sha256"):final(string_to_sign)
   local signature_hex = str.to_hex(signature_raw)
 
-  if conf.request_authentication.log then 
-    local log_message = "The signature has been created " .. signature_hex .. 
-      " with date " .. current_precise_date .. 
-      " for the request " .. canonical_request
+  if conf.request_authentication.log then
+    local log_message = "The signature has been created " .. signature_hex ..
+        " with date " .. current_precise_date ..
+        " for the request " .. canonical_request
     kong.log.notice(log_message)
-  end 
+  end
 
   local credential = conf.request_authentication.access_id .. "/" .. credential_scope
   local auth_header = GCLOUD_SIGNING_ALGORITHM .. " " ..
-    "Credential=" .. credential ..
-    ", SignedHeaders=" .. GCLOUD_SIGNED_HEADERS ..
-    ", Signature=" .. signature_hex
+      "Credential=" .. credential ..
+      ", SignedHeaders=" .. GCLOUD_SIGNED_HEADERS ..
+      ", Signature=" .. signature_hex
 
-  set_header("authorization", auth_header)
-  set_header("x-goog-date", current_precise_date)
-  set_header("x-goog-content-sha256", GCLOUD_UNSIGNED_PAYLOAD)
+  kong.service.request.set_header("authorization", auth_header)
+  kong.service.request.set_header("x-goog-date", current_precise_date)
+  kong.service.request.set_header("x-goog-content-sha256", GCLOUD_UNSIGNED_PAYLOAD)
 end
 
 local function transform_uri(conf)
@@ -163,17 +101,17 @@ local function transform_uri(conf)
     return
   end
 
-  local service_path = get_service_path()
-  local req_path = get_req_path()
-  local normalized_path = get_normalized_path(conf)
+  local service_path = path_normalization.get_service_path()
+  local req_path = kong.request.get_path()
+  local normalized_path = path_normalization.get_path(conf.path_transformation)
   if conf.path_transformation.log then
     local log_message = "The upstream path may be modifed. The request path " .. req_path ..
-      ", the service path " .. service_path ..
-      ", the normalized path " .. normalized_path
+        ", the service path " .. service_path ..
+        ", the normalized path " .. normalized_path
     kong.log.notice(log_message)
   end
 
-  set_path(normalized_path)
+  kong.service.request.set_path(normalized_path)
 end
 
 local function add_service_headers(conf)
@@ -181,34 +119,37 @@ local function add_service_headers(conf)
     return
   end
 
+  local real_ip = kong.request.get_header("x-real-ip")
+  if not real_ip or real_ip == "" then
+    real_ip = "0.0.0.0"
+  end
   local request_id = kong.request.get_header("x-request-id")
   if not request_id or request_id == "" then
     request_id = uuid.generate_v4()
   end
-
   local geoip_country = kong.request.get_header("x-geoip-country")
   if not geoip_country or geoip_country == "" then
     geoip_country = 'US'
   end
-
   local geoip_region_code = kong.request.get_header("x-geoip-region-code")
   if not geoip_region_code or geoip_region_code == "" then
     geoip_region_code = 'CA'
   end
 
+  kong.response.add_header("X-Real-Ip", real_ip)
   kong.response.add_header("X-Request-Id", request_id)
   kong.response.add_header("X-Geoip-Country", geoip_country)
   kong.response.add_header("X-Geoip-Region-Code", geoip_region_code)
 
-  local set_cookie_value = "sb_country_code=" .. geoip_country ..
-    ";Path=/;Max-Age=600, sb_region_code=" .. geoip_region_code ..
-    ";Path=/;Max-Age=600"
-  kong.response.add_header("Set-Cookie", set_cookie_value)
+  local country_code_cookie = string.format("sb_country_code=%s;Path=/;Max-Age=600", geoip_country)
+  local region_code_cookie = string.format("sb_region_code=%s;Path=/;Max-Age=600", geoip_region_code)
+  kong.response.add_header("Set-Cookie", country_code_cookie)
+  kong.response.add_header("Set-Cookie", region_code_cookie)
 
   if conf.service_headers.log then
     local log_message = "The service headers has been added. The request-id " .. request_id ..
-      ", the geoip country " .. geoip_country ..
-      ", the geoip region code " .. geoip_region_code
+        ", the geoip country " .. geoip_country ..
+        ", the geoip region code " .. geoip_region_code
     kong.log.notice(log_message)
   end
 end

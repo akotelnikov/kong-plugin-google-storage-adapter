@@ -16,7 +16,7 @@ return {
               fields = {
                 { enabled = { type = "boolean", required = true, default = true } },
                 { log = { type = "boolean", required = true, default = false } },
-                { prefix = { type = "string", required = false } }
+                { prefix = { type = "string", required = false, default = "/sites" } }
               }
             }
           },
