@@ -1,7 +1,7 @@
 local access = require "kong.plugins.google-storage-adapter.access"
 
 local GoogleStorageAdapterHandler = {
-  VERSION = "1.7.0",
+  VERSION = "1.8.0",
   PRIORITY = 901,
 }
 

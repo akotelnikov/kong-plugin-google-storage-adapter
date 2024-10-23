@@ -98,7 +98,6 @@ local function create_canonical_request(conf, current_precise_date)
 
   local bucket_name = conf.request_authentication.bucket_name
   local host = bucket_name .. "." .. GCLOUD_STORAGE_HOST
-  local query_string = kong.request.get_raw_query()
 
   local canonical_uri = path
   local canonical_headers = 'host:' .. host .. "\n" ..
@@ -106,8 +105,7 @@ local function create_canonical_request(conf, current_precise_date)
       'x-goog-date:' .. current_precise_date
 
   local canonical_request = GCLOUD_METHOD .. "\n" ..
-      canonical_uri .. "\n" ..
-      query_string .. "\n" ..
+      canonical_uri .. "\n\n" ..
       canonical_headers .. '\n\n' ..
       GCLOUD_SIGNED_HEADERS .. "\n" ..
       GCLOUD_UNSIGNED_PAYLOAD
