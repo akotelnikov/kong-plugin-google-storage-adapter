@@ -185,6 +185,7 @@ local function transform_uri(conf)
   end
 
   kong.service.request.set_path(normalized_path)
+  kong.service.request.set_raw_query("")
 end
 
 local function add_service_headers(conf)
