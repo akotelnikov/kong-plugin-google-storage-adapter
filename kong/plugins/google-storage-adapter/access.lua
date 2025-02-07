@@ -52,6 +52,13 @@ local function get_normalized_path(conf)
 
   local req_path = kong.request.get_path()
 
+  -- if is file for apple (TODO: need fixed it, and make it so that you can get any attached file)
+  local apple_path = req_path:match("^/.-/%.well%-known/apple%-developer%-merchantid%-domain%-association$")
+  
+  if apple_path ~= nil then
+    return apple_path
+  end
+
   -- if there's an active experiment we will change the service path
   local ab_testing_path = kong.ctx.shared.ab_testing_path
   if ab_testing_path and ab_testing_path ~= "" then
