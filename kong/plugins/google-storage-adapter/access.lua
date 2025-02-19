@@ -72,7 +72,7 @@ local function get_normalized_path(conf)
   end
 
   -- if is file for apple (TODO: need fixed it, and make it so that you can get any attached file)
-  local apple_path = req_path:match("^/.-/%.well%-known/apple%-developer%-merchantid%-domain%-association$")
+  local apple_path = req_path:match("^/.-/%.well%-known/.*$")
 
   if conf.path_transformation.log then
     local log_message = string.format("apple_path; %s", apple_path)
