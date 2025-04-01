@@ -1,14 +1,14 @@
-.semver-regxp: &semver-regexp /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
-
 stages:
   - lint
   - package
 
-image: registry.srv.local/ci/sb-lua-base:1.0.0
-
 lint:
   stage: lint
+  image: google/cloud-sdk:slim
   before_script:
+    # Install luarocks dependencies and luarocks itself
+    - apt-get update && apt-get install -y luarocks build-essential unzip
+    # Install luacheck
     - luarocks install luacheck
   script:
     - luacheck .
@@ -23,17 +23,23 @@ package:
     - apt-get update && apt-get install -y luarocks build-essential unzip
     # Install luacheck
     - luarocks install luacheck
+    - luarocks install lua-cjson
   script:
     - echo $SERVICE_ACCOUNT_DATA > ./secret.json
-    - luarocks build --local kong-plugin-google-storage-adapter
-    - luarocks pack kong-plugin-google-storage-adapter
+    - luarocks build --local ${CI_PROJECT_NAME}
+    - luarocks pack ${CI_PROJECT_NAME}
+    # 
+    - artifact_name=${CI_PROJECT_NAME}-${CI_COMMIT_TAG}
+    - artifact_archive=${artifact_name}.tar.gz
+    - touch ${artifact_archive}
+    - tar --exclude=./secret.json --exclude=./.git -czvpf ${artifact_archive} ./
     # upload to a storage
     - gcloud auth activate-service-account $SERVICE_ACCOUNT_EMAIL --key-file=./secret.json --project=cloud-storage-buckets-prod
     # Get the exact name of the generated rock file
-    - rock_file=$(ls *.rock)
-    - echo "Generated rock file $rock_file"
-    - artifact_name=${CI_COMMIT_SHORT_SHA}-${rock_file}
-    - gsutil cp "${rock_file}" gs://cloud-site-builder-bucket-prod/${artifact_name}
-    - echo "Artifact URL:https://storage.googleapis.com/cloud-site-builder-bucket-prod/${artifact_name}"
+    # - rock_file=$(ls *.rock)
+    # - echo "Generated rock file $rock_file"
+    - gsutil cp "${artifact_archive}" gs://cloud-site-builder-bucket-prod
+    - echo "Artifact URL:https://storage.googleapis.com/cloud-site-builder-bucket-prod/${artifact_archive}"
+    - luarocks upload ${artifact_name}.rockspec --api-key=${LUA_ROCKS_API_KEY}
   only:
-    - merge_requests
+    - tags
