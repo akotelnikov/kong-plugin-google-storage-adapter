@@ -35,8 +35,8 @@ package:
     - gcloud auth activate-service-account $SERVICE_ACCOUNT_EMAIL --key-file=./secret.json --project=cloud-storage-buckets-prod
     - gsutil cp "${artifact_archive}" gs://cloud-site-builder-bucket-prod
     - echo "Artifact URL:https://storage.googleapis.com/cloud-site-builder-bucket-prod/${artifact_archive}"
-    - luarocks pack ${artifact_name}
-    # - luarocks build --local ${CI_PROJECT_NAME}
-    - luarocks upload ${artifact_name}.rockspec --api-key=${LUA_ROCKS_API_KEY}
+    # - luarocks build --local
+    # - luarocks pack ${artifact_name}
+    - luarocks upload ${artifact_name}.rockspec --api-key=${LUA_ROCKS_API_KEY} --force
   only:
     - tags
