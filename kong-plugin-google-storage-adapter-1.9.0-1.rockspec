@@ -8,7 +8,7 @@ package = package_name
 version = full_version
 supported_platforms = { "linux", "macosx" }
 source = {
-  url = "https://storage.googleapis.com/cloud-site-builder-bucket-prod/" .. package_name .. full_version .. ".tar.gz"
+  url = "https://storage.googleapis.com/cloud-site-builder-bucket-prod/" .. package_name .. "-" .. full_version .. ".tar.gz"
 }
 
 description = {

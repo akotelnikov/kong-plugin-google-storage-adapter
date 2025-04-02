@@ -27,20 +27,16 @@ package:
   script:
     - artifact_name=${CI_PROJECT_NAME}-${CI_COMMIT_TAG}
     - echo "Artifact name:${artifact_name}"
-    # - luarocks build --local ${CI_PROJECT_NAME}
-    - luarocks pack ${artifact_name}
-    # 
     - artifact_archive=${artifact_name}.tar.gz
     - touch ${artifact_archive}
     - tar --exclude=./.git -czvpf ${artifact_archive} ./
     # upload to a storage
     - echo $SERVICE_ACCOUNT_DATA > ./secret.json
     - gcloud auth activate-service-account $SERVICE_ACCOUNT_EMAIL --key-file=./secret.json --project=cloud-storage-buckets-prod
-    # Get the exact name of the generated rock file
-    # - rock_file=$(ls *.rock)
-    # - echo "Generated rock file $rock_file"
     - gsutil cp "${artifact_archive}" gs://cloud-site-builder-bucket-prod
     - echo "Artifact URL:https://storage.googleapis.com/cloud-site-builder-bucket-prod/${artifact_archive}"
+    - luarocks pack ${artifact_name}
+    # - luarocks build --local ${CI_PROJECT_NAME}
     - luarocks upload ${artifact_name}.rockspec --api-key=${LUA_ROCKS_API_KEY}
   only:
     - tags

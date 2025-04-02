@@ -48,12 +48,3 @@ POST :8001/plugins
 	"id": "04752261-8efd-4898-9cbc-84573e6c8ee6"
 }
 ```
-## Deploy
-
-1. Make changes to the code
-2. Update version in file `kong-plugin-google-storage-adapter-{version}-{revision}` and change file name
-2. Push it to master
-3. Create tag by version `git tag 0.3.3-0 -m "<tag message>"`
-4. Push tag `git push origin 0.3.3-0`
-5. Create pack `luarocks pack kong-plugin-google-storage-adapter-1.8.0-0.rockspec`
-6. Upload pack `luarocks upload kong-plugin-google-storage-adapter-1.8.0-0.rockspec --api-key=`. Get API key from keeper
