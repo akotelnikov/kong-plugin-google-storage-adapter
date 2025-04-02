@@ -25,15 +25,16 @@ package:
     - luarocks install luacheck
     - luarocks install lua-cjson
   script:
-    - echo $SERVICE_ACCOUNT_DATA > ./secret.json
-    - luarocks build --local ${CI_PROJECT_NAME}
-    - luarocks pack ${CI_PROJECT_NAME}
-    # 
     - artifact_name=${CI_PROJECT_NAME}-${CI_COMMIT_TAG}
+    - echo "Artifact name:${artifact_name}"
+    # - luarocks build --local ${CI_PROJECT_NAME}
+    - luarocks pack ${artifact_name}
+    # 
     - artifact_archive=${artifact_name}.tar.gz
     - touch ${artifact_archive}
-    - tar --exclude=./secret.json --exclude=./.git -czvpf ${artifact_archive} ./
+    - tar --exclude=./.git -czvpf ${artifact_archive} ./
     # upload to a storage
+    - echo $SERVICE_ACCOUNT_DATA > ./secret.json
     - gcloud auth activate-service-account $SERVICE_ACCOUNT_EMAIL --key-file=./secret.json --project=cloud-storage-buckets-prod
     # Get the exact name of the generated rock file
     # - rock_file=$(ls *.rock)
